@@ -180,10 +180,11 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase
 import {getDatabase,ref,onValue,set,push,remove,update} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig={
-projectId:"jyoujyou-shop2",
-  
-databaseURL:"https://jyoujyou-shop2-default-rtdb.asia-southeast1.firebasedatabase.app",
-  appId:"1:535896228481:web:d06e634d2d7330630c4380"
+projectId:"isono-shop",
+apiKey:"AIzaSyA4qMw7XUW8eYPurH1wXiO0x1uKBKsW8NU",
+authDomain:"isono-shop.firebaseapp.com",
+databaseURL:"https://isono-shop-default-rtdb.asia-southeast1.firebasedatabase.app",
+  appId:"1:599129918873:web:c034f9533a541978fe9708"
 };
 const app=initializeApp(firebaseConfig), db=getDatabase(app);
 const storesRef=ref(db,"stores"), productsRef=ref(db,"products"), itemsRef=ref(db,"items");
@@ -404,27 +405,4 @@ $("printWeekend").onclick=()=>printPrep("weekend");
 
 <div id="printSheet"></div>
 
-
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from 
-"https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyCEO2XJn29724-W6FFB-a1avUlKQBeF8D4",
-    authDomain: "jyoujyou-shop2.firebaseapp.com",
-    databaseURL: 
-"https://jyoujyou-shop2-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "jyoujyou-shop2",
-    storageBucket: "jyoujyou-shop2.firebasestorage.app",
-    messagingSenderId: "593513983398",
-    appId: "1:593513983398:web:630efea4a890af5fb4f367"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script>
 </body></html>
