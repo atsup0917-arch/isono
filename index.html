@@ -7518,13 +7518,7 @@ function renderDay(){
       `<div class="small" style="margin-top:8px;color:#555">${thisYear}年 累計：¥${thisTotal.toLocaleString('ja-JP')}`+
       (hasLastYear?`　（${lastYear}年同期間比 ${diff>=0?'+':''}${diff}%）`:'')+`</div>`;
   }
-  async function renderDailyTrendChart(box){
-    if(!salesTrendDailyAnchor){
-      const b=salesData && Object.keys(salesData).length ? new Date(Object.keys(salesData).sort().slice(-1)[0]+'T00:00:00') : new Date();
-      salesTrendDailyAnchor=new Date(b.getFullYear(),b.getMonth(),1);
-    }
-    const y=salesTrendDailyAnchor.getFullYear(), m=salesTrendDailyAnchor.getMonth();
-    $('salesTrendDailyLabel').textContent=`${y}年${m+1}月`;
+  function dailyValsForMonth(y,m){ // m: 0-11
     const last=new Date(y,m+1,0).getDate();
     const vals=[];
     for(let d=1;d<=last;d++){
@@ -7532,9 +7526,21 @@ function renderDay(){
       const rec=salesData[iso];
       vals.push(rec&&rec.amount!=null?Number(rec.amount):(rec&&rec.closedDinner?0:null));
     }
+    return {vals,last};
+  }
+  async function renderDailyTrendChart(box){
+    if(!salesTrendDailyAnchor){
+      const b=salesData && Object.keys(salesData).length ? new Date(Object.keys(salesData).sort().slice(-1)[0]+'T00:00:00') : new Date();
+      salesTrendDailyAnchor=new Date(b.getFullYear(),b.getMonth(),1);
+    }
+    const y=salesTrendDailyAnchor.getFullYear(), m=salesTrendDailyAnchor.getMonth();
+    $('salesTrendDailyLabel').textContent=`${y}年${m+1}月`;
+    const {vals,last}=dailyValsForMonth(y,m);
+    const {vals:lastVals}=dailyValsForMonth(y-1,m);
     const present=vals.filter(v=>v!=null);
-    if(!present.length){box.innerHTML='<div class="small" style="color:#666">この月の売上入力データがまだありません。</div>';return;}
-    const max=Math.max(1,...present);
+    const lastPresent=lastVals.filter(v=>v!=null);
+    if(!present.length&&!lastPresent.length){box.innerHTML='<div class="small" style="color:#666">この月の売上入力データがまだありません。</div>';return;}
+    const max=Math.max(1,...present,...lastPresent);
     const W=700,H=270,padB=30,padT=36,padL=36,padR=36;
     const plotW=W-padL-padR, plotH=H-padB-padT;
     const xOf=i=>padL+plotW*(i/(last-1));
@@ -7545,23 +7551,42 @@ function renderDay(){
       grid+=`<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#e5e9eb" stroke-width="1"></line>`;
       grid+=`<text x="2" y="${gy-3}" font-size="9" fill="#999">${manEn(max*f)}</text>`;
     });
-    let segs='',cur=[];
-    vals.forEach((v,i)=>{
-      if(v!=null)cur.push(`${xOf(i)},${yOf(v)}`);
-      else{if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="#17abe1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;cur=[];}
-    });
-    if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="#17abe1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    function lineOf(arr,color,width){
+      let segs='',cur=[];
+      arr.forEach((v,i)=>{
+        if(v!=null)cur.push(`${xOf(i)},${yOf(v)}`);
+        else{if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;cur=[];}
+      });
+      if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      return segs;
+    }
+    let segs=lineOf(lastVals,'#b9c6cb',2)+lineOf(vals,'#17abe1',2.5);
     let dots='';
+    lastVals.forEach((v,i)=>{
+      if(v==null)return;
+      dots+=`<circle cx="${xOf(i)}" cy="${yOf(v)}" r="2.5" fill="#b9c6cb"><title>${y-1}年${m+1}月${i+1}日：${v===0?'定休日':'¥'+v.toLocaleString('ja-JP')}</title></circle>`;
+    });
     vals.forEach((v,i)=>{
       const showLabel=(i===0||i===last-1||(i+1)%5===0)&&v!=null;
       if(v==null)return;
-      dots+=`<circle cx="${xOf(i)}" cy="${yOf(v)}" r="${v===0?2.5:3.5}" fill="${v===0?'#ccc':'#17abe1'}" stroke="#fff" stroke-width="1"><title>${i+1}日：${v===0?'定休日':'¥'+v.toLocaleString('ja-JP')}</title></circle>`;
+      dots+=`<circle cx="${xOf(i)}" cy="${yOf(v)}" r="${v===0?2.5:3.5}" fill="${v===0?'#ccc':'#17abe1'}" stroke="#fff" stroke-width="1"><title>${y}年${m+1}月${i+1}日：${v===0?'定休日':'¥'+v.toLocaleString('ja-JP')}</title></circle>`;
       if(showLabel)dots+=`<text x="${xOf(i)}" y="${yOf(v)-8}" text-anchor="middle" font-size="10" font-weight="700" fill="#0d7ea3">${v===0?'休':manEn(v)}</text>`;
       dots+=`<text x="${xOf(i)}" y="${H-padB+14}" text-anchor="middle" font-size="9" fill="#777">${(i===0||i===last-1||(i+1)%5===0)?(i+1):''}</text>`;
     });
     const total=present.reduce((a,b)=>a+b,0), workDays=present.filter(v=>v>0).length;
-    box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${grid}${segs}${dots}</svg>`+
-      `<div class="small" style="margin-top:8px;color:#555">月合計：¥${total.toLocaleString('ja-JP')}　営業日数：${workDays}日${workDays?'　平均：¥'+Math.round(total/workDays).toLocaleString('ja-JP'):''}</div>`;
+    const lastTotal=lastPresent.reduce((a,b)=>a+b,0);
+    const legend=`<div class="small" style="display:flex;gap:14px;align-items:center;margin-bottom:4px">`+
+      (lastPresent.length?`<span><span style="display:inline-block;width:10px;height:10px;background:#c9d6da;border-radius:2px;margin-right:4px"></span>${y-1}年${m+1}月</span>`:'')+
+      `<span><span style="display:inline-block;width:10px;height:10px;background:#17abe1;border-radius:2px;margin-right:4px"></span>${y}年${m+1}月</span></div>`;
+    let compareLine='';
+    if(lastTotal>0){
+      const gap=lastTotal-total;
+      compareLine=gap>0
+        ? `<div class="small" style="margin-top:4px;color:#c65a1f;font-weight:700">🎯 ${y-1}年${m+1}月（¥${lastTotal.toLocaleString('ja-JP')}）まであと ¥${gap.toLocaleString('ja-JP')}</div>`
+        : `<div class="small" style="margin-top:4px;color:#176b32;font-weight:700">🎉 ${y-1}年${m+1}月（¥${lastTotal.toLocaleString('ja-JP')}）を ¥${Math.abs(gap).toLocaleString('ja-JP')} 上回っています</div>`;
+    }
+    box.innerHTML=legend+`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${grid}${segs}${dots}</svg>`+
+      `<div class="small" style="margin-top:8px;color:#555">月合計：¥${total.toLocaleString('ja-JP')}　営業日数：${workDays}日${workDays?'　平均：¥'+Math.round(total/workDays).toLocaleString('ja-JP'):''}</div>`+compareLine;
   }
   function initSalesTrendControls(){
     $('salesTrendModeMonthly')?.addEventListener('click',()=>{salesTrendMode='monthly';$('salesTrendModeMonthly').classList.add('active');$('salesTrendModeDaily').classList.remove('active');renderMonthlySalesChart();});
