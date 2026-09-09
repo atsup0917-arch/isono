@@ -7803,7 +7803,7 @@ function renderDay(){
       if(activeGroup.type==='remark'){
         STORES.forEach((s,si)=>{
           const v=String(rows[i][2+si]||'').trim();
-          if(!v) return;
+          if(!v||v.startsWith('※')) return; // ※で始まる注意書きは品目ではないので除外
           const key=s+'::'+v;
           if(remarkSeen.has(key)) return;
           remarkSeen.add(key);
@@ -7813,7 +7813,7 @@ function renderDay(){
         const vlabel=activeGroup.vlabel;
         STORES.forEach((s,si)=>{
           const v=String(rows[i][2+si]||'').trim();
-          if(!v) return;
+          if(!v||v.startsWith('※')) return; // ※で始まる注意書きは品目ではないので除外
           const key=vlabel+'::'+s+'::'+v;
           if(vendorSeen.has(key)) return;
           vendorSeen.add(key);
