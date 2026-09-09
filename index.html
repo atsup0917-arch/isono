@@ -885,7 +885,7 @@ html.recipeModalLocked, body.recipeModalLocked{
 #shiftPage .shiftAttendanceNo{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:50%;background:#eefaff;color:#1ba1cb;font-weight:800;font-size:14px}
 #shiftPage .shiftMemoCalendar{margin-top:14px;border:1px solid #e1e7e8;border-radius:16px;padding:12px;background:#fff}
 #shiftPage .shiftMemoCalendarHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-#shiftPage .shiftMemoCalendarHead button{margin:0;min-width:48px;padding:9px 12px}
+#shiftPage .shiftMemoCalendarHead button{width:auto;flex:0 0 auto;margin:0;min-width:48px;padding:9px 12px}
 #shiftPage .shiftMemoCalendarTitle{font-size:20px;font-weight:800;text-align:center;flex:1}
 #shiftPage .shiftMemoCalendarWeek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
 #shiftPage .shiftMemoCalendarWeek div{text-align:center;font-size:12px;font-weight:700;color:#666;padding:4px 0}
@@ -7287,7 +7287,7 @@ function renderDay(){
 .ccSalesQuickStatus.closed{color:#777}
 #salesPage .salesCal{margin-top:12px;border:1px solid #e1e7e8;border-radius:16px;padding:12px;background:#fff}
 #salesPage .salesCalHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-#salesPage .salesCalHead button{margin:0;min-width:48px;padding:9px 12px}
+#salesPage .salesCalHead button{width:auto;flex:0 0 auto;margin:0;min-width:48px;padding:9px 12px}
 #salesPage .salesCalTitle{font-size:20px;font-weight:800;text-align:center;flex:1}
 #salesPage .salesCalWeek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
 #salesPage .salesCalWeek div{text-align:center;font-size:12px;font-weight:700;color:#666;padding:4px 0}
@@ -7304,6 +7304,9 @@ function renderDay(){
 #salesPage .salesStatusBadge{margin-bottom:8px}
 .salesTrendModeBtn{width:auto!important;margin:0 0 0 6px!important;padding:8px 14px!important}
 .salesTrendModeBtn.active{background:#17abe1!important;color:#fff!important;border-color:#17abe1!important}
+#salesTrendDailyNav{gap:8px}
+#salesTrendDailyNav button{width:auto!important;flex:0 0 auto!important;min-width:48px;margin:0!important;padding:9px 12px!important}
+#salesTrendDailyLabel{flex:1 1 auto;text-align:center;white-space:nowrap}
 .salesClosedBtn.active{background:#c62828!important;color:#fff!important;border-color:#c62828!important}
 #salesPage label{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .salesClearBtn{width:auto!important;display:inline!important;margin:0!important;padding:2px 8px!important;font-size:12px!important;font-weight:700!important;background:transparent!important;color:#b45309!important;border:1px solid #e6c68a!important;border-radius:999px!important}
@@ -7808,7 +7811,7 @@ function renderDay(){
 #shiftNameEditorOverlay{position:fixed;inset:0;z-index:99999;background:rgba(245,249,251,.98);overflow:auto;padding:18px;box-sizing:border-box}
 #shiftNameEditorOverlay .shiftNameEditorPanel{max-width:720px;margin:0 auto;background:#fff;border-radius:20px;padding:16px;box-shadow:0 10px 35px rgba(0,0,0,.14)}
 #shiftNameEditorOverlay .shiftNameEditorHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-weight:800;font-size:20px}
-#shiftNameEditorOverlay .shiftNameEditorBack{border:0;border-radius:12px;padding:10px 14px;background:#eef4f5;color:#188bab;font-weight:800}
+#shiftNameEditorOverlay .shiftNameEditorBack{width:auto;flex:0 0 auto;border:0;border-radius:12px;padding:10px 14px;background:#eef4f5;color:#188bab;font-weight:800}
 #shiftNameEditorOverlay .shiftNameEditRow{display:grid;grid-template-columns:36px 1fr 48px;gap:8px;align-items:center;margin:8px 0}
 #shiftNameEditorOverlay .shiftNameEditRow input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d8e1e3;border-radius:12px;font-size:16px}
 #shiftNameEditorOverlay .shiftNameDelete{border:0;background:#fff;font-size:20px;padding:8px}
