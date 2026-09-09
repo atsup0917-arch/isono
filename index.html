@@ -1324,11 +1324,13 @@ body{overflow-anchor:none!important;}
 </style>
 </head>
 <body><div class="wrap">
-<div class="navtabs navtabs3 navtabs4">
+<style id="navtabs5Fix">.navtabs.navtabs5{grid-template-columns:repeat(4,minmax(0,1fr))!important}</style>
+<div class="navtabs navtabs3 navtabs4 navtabs5">
 <button id="tabShopping" class="isonoHiddenTab">🛒 買い物</button>
 <button id="tabOpenClose" class="active">✅ 開店<br>閉店</button>
 <button id="tabPrep">🔪 仕込み表</button>
 <button id="tabShift">👥 シフト</button>
+<button id="tabOrders">📦 発注</button>
 </div>
 <style>
 /* イソノ様向け:買い物ページはUI上から非表示(内部コードは仕込み表の商品原価機能が
@@ -1834,6 +1836,15 @@ body{overflow-anchor:none!important;}
 
 </div>
 
+
+<div id="ordersPage" class="page" hidden>
+  <h1 style="margin:0 0 12px">📦 発注管理</h1>
+  <div class="card" style="padding:1rem;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div id="ordersDateLabel" style="font-weight:800;font-size:16px"></div>
+    <button type="button" id="ordersRefreshBtn" class="gray" style="width:auto;padding:8px 14px">🔄 再読込</button>
+  </div>
+  <div id="ordersContent"></div>
+</div>
 
 <div id="prepPage" class="page" hidden>
 <h1>🔪 仕込み表</h1>
@@ -2419,16 +2430,19 @@ $("uncheckAll").onclick=async()=>{for(const [id,x] of vals(items))if(x.done)awai
 // ---- 野菜発注 ----
 const weekdays=["日","月","火","水","木","金","土"];
 function switchPage(which){
- $("shoppingPage").hidden=which!=="shopping"; $("openClosePage").hidden=which!=="openclose"; $("prepPage").hidden=which!=="prep"; $("shiftPage").hidden=which!=="shift";
+ $("shoppingPage").hidden=which!=="shopping"; $("openClosePage").hidden=which!=="openclose"; $("prepPage").hidden=which!=="prep"; $("shiftPage").hidden=which!=="shift"; $("ordersPage").hidden=which!=="orders";
  $("tabShopping").classList.toggle("active",which==="shopping");
  $("tabOpenClose").classList.toggle("active",which==="openclose");
  $("tabPrep").classList.toggle("active",which==="prep");
  $("tabShift").classList.toggle("active",which==="shift");
+ $("tabOrders").classList.toggle("active",which==="orders");
+ if(which==="orders" && typeof window.loadOrdersPage==="function") window.loadOrdersPage();
 }
 $("tabShopping").onclick=()=>switchPage("shopping");
 $("tabOpenClose").onclick=()=>switchPage("openclose");
 $("tabPrep").onclick=()=>switchPage("prep");
 $("tabShift").onclick=()=>switchPage("shift");
+$("tabOrders").onclick=()=>switchPage("orders");
 // スマホでのスワイプ切り替え機能（別スクリプトから呼び出すためだけに公開。既存の動作は変更しない）
 window.switchPage=switchPage;
 
@@ -7694,6 +7708,180 @@ function renderDay(){
     setInterval(augmentShift,1500);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+<script id="ordersManagementScript">
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const SHEET_URL='https://docs.google.com/spreadsheets/d/1GDRbub-VRt9pUbt8HbWKJKb-CIPa-S30-tNvTLuOZbQ/export?format=csv';
+  const STORES=['ランチ','上々夜','サンヂ','炉ばた','イソノ','えびす','トトイチ','こたつねこ','日比野'];
+  const FISH_ITEMS=['まぐろ300g','鰹　1/4','青魚　1尾','ブリ系　1/4','カンパチ　1/4','ホタテ500ｇ','ウニ板','真鯛 1/2','ひらめ 1/2','金目鯛 1/2','サーモン 1/8','さわら 1/4','セル牡蠣（個）','海ぶどう（p）','生しらす1p','ネギトロ1p','他刺ネタ（種）','煮魚用1尾','けん (1kg)'];
+  const REMARK_LABEL='備考欄です。 ほしい物や 要望など';
+  const VENDOR_LABELS=['本場手買い','大川発注','仲正         FAX発注','丸正       FAX発注','鶏孫商店','丸高発注','マルス買い物','イソノから 補充','炉ばたから'];
+  function norm(s){return String(s??'').replace(/\s+/g,'').trim();}
+  const FISH_SET=new Set(FISH_ITEMS.map(norm));
+  const REMARK_NORM=norm(REMARK_LABEL);
+  const VENDOR_NORM=VENDOR_LABELS.map(norm);
+
+  // シンプルなCSVパーサー（ダブルクォート内の改行・カンマに対応）
+  function parseCSV(text){
+    const rows=[]; let row=[]; let field=''; let inQuotes=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(inQuotes){
+        if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQuotes=false; }
+        else field+=c;
+      } else {
+        if(c==='"') inQuotes=true;
+        else if(c===','){ row.push(field); field=''; }
+        else if(c==='\r'){ }
+        else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else field+=c;
+      }
+    }
+    if(field!==''||row.length){ row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  // シートは「展開されている（折りたたまれていない）納品日ブロックだけ」がCSVに含まれる仕様のため、
+  // 特定の日付を探すのではなく、CSVに出てきた最初の「納品日」ブロックをそのまま使う。
+  function parseOrders(rows){
+    let startIdx=-1, deliveryDate='';
+    for(let i=0;i<rows.length;i++){
+      if(norm(rows[i][0])==='納品日'){
+        startIdx=i;
+        deliveryDate=String(rows[i][2]||'').trim();
+        break;
+      }
+    }
+    if(startIdx<0) return null;
+    const fish={};
+    const remarks={}; const remarkSeen=new Set();
+    const vendors={}; const vendorSeen=new Set(); const vendorDisplayName={};
+    // 備考欄・業者名は結合セルのため、2行目以降はラベル列が空欄になる。
+    // 直前に認識したグループ（備考欄／業者）を覚えておき、空欄行はそのグループの続きとして扱う。
+    let activeGroup=null; // {type:'remark'} または {type:'vendor', vlabel}
+    for(let i=startIdx+1;i<rows.length;i++){
+      const raw=rows[i][0]||'';
+      const label=norm(raw);
+      if(label==='納品日') break;
+      if(label!==''){
+        if(FISH_SET.has(label)){
+          activeGroup=null;
+          if(!fish[raw]) fish[raw]={};
+          STORES.forEach((s,si)=>{
+            const v=String(rows[i][2+si]||'').trim();
+            if(v) fish[raw][s]=v;
+          });
+          continue;
+        }
+        if(label===REMARK_NORM){ activeGroup={type:'remark'}; }
+        else {
+          const vi=VENDOR_NORM.indexOf(label);
+          if(vi>=0){
+            const vlabel=VENDOR_LABELS[vi];
+            vendorDisplayName[vlabel]=vlabel.replace(/\s+/g,' ').trim();
+            activeGroup={type:'vendor', vlabel};
+          } else {
+            activeGroup=null; // 予約数・スタッフ数などの無関係な行
+          }
+        }
+      }
+      if(!activeGroup) continue;
+      if(activeGroup.type==='remark'){
+        STORES.forEach((s,si)=>{
+          const v=String(rows[i][2+si]||'').trim();
+          if(!v) return;
+          const key=s+'::'+v;
+          if(remarkSeen.has(key)) return;
+          remarkSeen.add(key);
+          (remarks[s]=remarks[s]||[]).push(v);
+        });
+      } else if(activeGroup.type==='vendor'){
+        const vlabel=activeGroup.vlabel;
+        STORES.forEach((s,si)=>{
+          const v=String(rows[i][2+si]||'').trim();
+          if(!v) return;
+          const key=vlabel+'::'+s+'::'+v;
+          if(vendorSeen.has(key)) return;
+          vendorSeen.add(key);
+          if(!vendors[vlabel]) vendors[vlabel]={};
+          (vendors[vlabel][s]=vendors[vlabel][s]||[]).push(v);
+        });
+      }
+    }
+    return {fish, remarks, vendors, vendorDisplayName, deliveryDate};
+  }
+
+  function isNumeric(v){ return /^-?\d+(\.\d+)?$/.test(v); }
+
+  function render(data){
+    const box=$('ordersContent');
+    if(!data){
+      box.innerHTML='<div class="card" style="padding:1rem;color:#666">この日付の発注データが見つかりませんでした。</div>';
+      return;
+    }
+    let html='';
+    const fishRows=Object.entries(data.fish).filter(([label,byStore])=>Object.keys(byStore).length);
+    if(fishRows.length){
+      html+='<div class="card" style="padding:1rem;margin-bottom:12px"><h2 style="margin:0 0 10px">🐟 鮮魚（本場仕入れ）</h2>';
+      fishRows.forEach(([label,byStore])=>{
+        const entries=Object.entries(byStore);
+        const allNumeric=entries.every(([,v])=>isNumeric(v));
+        const total=allNumeric?entries.reduce((a,[,v])=>a+Number(v),0):null;
+        const breakdown=entries.map(([s,v])=>`${esc(s)}${esc(v)}`).join('／');
+        html+=`<div style="padding:8px 0;border-bottom:1px solid #eee">
+          <div style="font-weight:700">${esc(label)}${total!=null?`：${total}`:''}</div>
+          <div style="font-size:13px;color:#666;padding-left:12px">└ ${breakdown}</div>
+        </div>`;
+      });
+      html+='</div>';
+    }
+    const remarkStores=Object.keys(data.remarks);
+    if(remarkStores.length){
+      html+='<div class="card" style="padding:1rem;margin-bottom:12px"><h2 style="margin:0 0 10px">📋 備考・要望</h2>';
+      remarkStores.forEach(s=>{
+        html+=`<div style="padding:6px 0"><b>${esc(s)}</b>：${esc(data.remarks[s].join('／'))}</div>`;
+      });
+      html+='</div>';
+    }
+    Object.entries(data.vendors).forEach(([vlabel,byStore])=>{
+      const stores=Object.keys(byStore);
+      if(!stores.length) return;
+      const icon=vlabel.indexOf('FAX')>=0?'📠':(vlabel==='マルス買い物'?'🛒':'🦀');
+      html+=`<div class="card" style="padding:1rem;margin-bottom:12px"><h2 style="margin:0 0 10px">${icon} ${esc(data.vendorDisplayName[vlabel]||vlabel)}</h2>`;
+      stores.forEach(s=>{
+        html+=`<div style="padding:6px 0"><b>${esc(s)}</b>：${esc(byStore[s].join('、'))}</div>`;
+      });
+      html+='</div>';
+    });
+    if(!html){
+      html='<div class="card" style="padding:1rem;color:#666">この日の発注はまだ入力されていません。</div>';
+    }
+    box.innerHTML=html;
+  }
+
+  async function loadOrdersPage(){
+    const box=$('ordersContent');
+    box.innerHTML='<div class="card" style="padding:1rem;color:#666">読み込み中…</div>';
+    $('ordersDateLabel').textContent='読み込み中…';
+    try{
+      const res=await fetch(SHEET_URL);
+      if(!res.ok) throw new Error('sheet fetch failed: '+res.status);
+      const text=await res.text();
+      const rows=parseCSV(text);
+      const data=parseOrders(rows);
+      $('ordersDateLabel').textContent=data?(data.deliveryDate+' 納品分'):'発注データなし';
+      render(data);
+    }catch(e){
+      console.error(e);
+      $('ordersDateLabel').textContent='';
+      box.innerHTML='<div class="card" style="padding:1rem;color:#a32d2d">発注データの読み込みに失敗しました。'+esc(e.message||String(e))+'</div>';
+    }
+  }
+  window.loadOrdersPage=loadOrdersPage;
+  $('ordersRefreshBtn')?.addEventListener('click',loadOrdersPage);
 })();
 </script>
 <script id="shiftSalesExpenseButtonBind">
