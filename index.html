@@ -7302,6 +7302,8 @@ function renderDay(){
 #salesPage .salesCalDot.missing{background:#d98a1f;border-color:#d98a1f}
 #salesPage .salesCalHint{font-size:13px;color:#666;margin-top:8px;line-height:1.6}
 #salesPage .salesStatusBadge{margin-bottom:8px}
+.salesTrendModeBtn{width:auto!important;margin:0 0 0 6px!important;padding:8px 14px!important}
+.salesTrendModeBtn.active{background:#17abe1!important;color:#fff!important;border-color:#17abe1!important}
 .salesClosedBtn.active{background:#c62828!important;color:#fff!important;border-color:#c62828!important}
 #salesPage label{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .salesClearBtn{width:auto!important;display:inline!important;margin:0!important;padding:2px 8px!important;font-size:12px!important;font-weight:700!important;background:transparent!important;color:#b45309!important;border:1px solid #e6c68a!important;border-radius:999px!important}
@@ -7326,6 +7328,20 @@ function renderDay(){
     </div>
     <div style="margin-top:10px"><button id="salesSave">保存</button></div>
     <div id="salesCompare" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <div class="salesPageHeader"><h2 style="margin:0">📈 売上推移</h2>
+      <div>
+        <button type="button" id="salesTrendModeMonthly" class="gray salesTrendModeBtn active">月別</button>
+        <button type="button" id="salesTrendModeDaily" class="gray salesTrendModeBtn">日別</button>
+      </div>
+    </div>
+    <div id="salesTrendDailyNav" hidden style="display:flex;align-items:center;justify-content:space-between;margin:8px 0">
+      <button type="button" class="gray" id="salesTrendDailyPrev">‹</button>
+      <div id="salesTrendDailyLabel" style="font-weight:800"></div>
+      <button type="button" class="gray" id="salesTrendDailyNext">›</button>
+    </div>
+    <div id="salesMonthlyChart"></div>
   </div>
 </div>
 <script id="salesManagementAddScript">
@@ -7416,12 +7432,151 @@ function renderDay(){
     calendarAnchor=new Date(base.getFullYear(),base.getMonth(),1);
     renderSalesCalendar();
   }
+  function manEn(n){return (Number(n||0)/10000).toLocaleString('ja-JP',{maximumFractionDigits:1})+'万';}
+  let salesTrendMode='monthly';
+  let salesTrendDailyAnchor=null; // Date, first-of-month, for 日別 view navigation
+  function monthlyTotalsFromDaily(dailyData){
+    // 日別入力(sales/daily)を年月ごとに合算する。closedDinner=trueの日は0扱いで合算に含める。
+    const totals={};
+    Object.entries(dailyData||{}).forEach(([date,rec])=>{
+      if(!rec)return;
+      const ym=date.slice(0,7).replace('-','');
+      const amt=Number(rec.amount!=null?rec.amount:(rec.dinner||0))||0;
+      totals[ym]=(totals[ym]||0)+amt;
+    });
+    return totals;
+  }
+  async function renderMonthlySalesChart(){
+    const box=$('salesMonthlyChart'); if(!box||!fb()?.get)return;
+    $('salesTrendDailyNav').hidden=(salesTrendMode!=='daily');
+    if(salesTrendMode==='daily'){ await renderDailyTrendChart(box); return; }
+
+    const snap=await fb().get(fb().ref(fb().db,'sales/monthly'));
+    const monthlyData=snap?.val?.()||{};
+    const dailyTotals=monthlyTotalsFromDaily(salesData);
+    const allYm=new Set([...Object.keys(monthlyData),...Object.keys(dailyTotals)]);
+    if(!allYm.size){box.innerHTML='<div class="small" style="color:#666">売上データがまだ登録されていません。</div>';return;}
+    const years=[...new Set([...allYm].map(p=>p.slice(0,4)))].sort();
+    const thisYear=years[years.length-1];
+    const lastYear=String(Number(thisYear)-1);
+    const hasLastYear=years.includes(lastYear);
+    const valOf=(ym,useDaily)=> useDaily? (dailyTotals[ym]!=null?dailyTotals[ym]:null) : (monthlyData[ym]?Number(monthlyData[ym].sales||0):null);
+    // 今年は日別入力の合算を優先（毎日の入力を反映）、無ければ月次インポート値を使う。昨年は月次インポート値。
+    const thisVals=[], lastVals=[];
+    for(let m=1;m<=12;m++){
+      const ym=thisYear+String(m).padStart(2,'0');
+      const ymLast=lastYear+String(m).padStart(2,'0');
+      const tv = dailyTotals[ym]!=null ? dailyTotals[ym] : (monthlyData[ym]?Number(monthlyData[ym].sales||0):null);
+      thisVals.push(tv);
+      lastVals.push(hasLastYear ? (monthlyData[ymLast]?Number(monthlyData[ymLast].sales||0):null) : null);
+    }
+    const max=Math.max(1,...thisVals.filter(v=>v!=null),...lastVals.filter(v=>v!=null));
+    const W=700,H=290,padB=34,padT=42,padL=36,padR=36;
+    const plotW=W-padL-padR, plotH=H-padB-padT;
+    const xOf=i=>padL+plotW*(i/11);
+    const yOf=v=>H-padB-(v/max)*plotH;
+    // 目盛り線（0・50%・100%）で数字の目安をわかりやすくする
+    let grid='';
+    [0,0.5,1].forEach(f=>{
+      const gy=H-padB-plotH*f;
+      grid+=`<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#e5e9eb" stroke-width="1"></line>`;
+      grid+=`<text x="2" y="${gy-3}" font-size="9" fill="#999">${manEn(max*f)}</text>`;
+    });
+    function lineOf(vals,color,width){
+      const pts=vals.map((v,i)=>v!=null?`${xOf(i)},${yOf(v)}`:null).filter(Boolean);
+      // 欠測（データなし月）があっても、値がある点同士だけを線でつなぐ
+      let segs='',cur=[];
+      vals.forEach((v,i)=>{
+        if(v!=null)cur.push(`${xOf(i)},${yOf(v)}`);
+        else{if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;cur=[];}
+      });
+      if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      return segs;
+    }
+    let bars=grid;
+    bars+=lineOf(lastVals,'#b9c6cb',2);
+    bars+=lineOf(thisVals,'#17abe1',3);
+    for(let i=0;i<12;i++){
+      const lv=lastVals[i], tv=thisVals[i];
+      if(lv!=null){
+        bars+=`<circle cx="${xOf(i)}" cy="${yOf(lv)}" r="3" fill="#b9c6cb"><title>${lastYear}年${i+1}月：¥${lv.toLocaleString('ja-JP')}</title></circle>`;
+      }
+      if(tv!=null){
+        bars+=`<circle cx="${xOf(i)}" cy="${yOf(tv)}" r="4.5" fill="#17abe1" stroke="#fff" stroke-width="1.5"><title>${thisYear}年${i+1}月：¥${tv.toLocaleString('ja-JP')}</title></circle>`;
+        bars+=`<text x="${xOf(i)}" y="${yOf(tv)-10}" text-anchor="middle" font-size="11" font-weight="700" fill="#0d7ea3">${manEn(tv)}</text>`;
+      }
+      bars+=`<text x="${xOf(i)}" y="${H-padB+16}" text-anchor="middle" font-size="12" fill="#555">${i+1}月</text>`;
+    }
+    const thisTotal=thisVals.filter(v=>v!=null).reduce((a,b)=>a+b,0);
+    // 前年同期間比は「今年データがある月」だけで昨年側も合計する（今年が年の途中でも公平に比較する）
+    const sameSpanLastTotal=thisVals.reduce((sum,v,i)=>sum+(v!=null&&lastVals[i]!=null?lastVals[i]:0),0);
+    const diff=sameSpanLastTotal? Math.round((thisTotal-sameSpanLastTotal)/sameSpanLastTotal*1000)/10 : null;
+    const legend=`<div class="small" style="display:flex;gap:14px;align-items:center;margin-bottom:4px">`+
+      (hasLastYear?`<span><span style="display:inline-block;width:10px;height:10px;background:#c9d6da;border-radius:2px;margin-right:4px"></span>${lastYear}年</span>`:'')+
+      `<span><span style="display:inline-block;width:10px;height:10px;background:#17abe1;border-radius:2px;margin-right:4px"></span>${thisYear}年（毎日の入力を含む）</span></div>`;
+    box.innerHTML=legend+`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${bars}</svg>`+
+      `<div class="small" style="margin-top:8px;color:#555">${thisYear}年 累計：¥${thisTotal.toLocaleString('ja-JP')}`+
+      (hasLastYear?`　（${lastYear}年同期間比 ${diff>=0?'+':''}${diff}%）`:'')+`</div>`;
+  }
+  async function renderDailyTrendChart(box){
+    if(!salesTrendDailyAnchor){
+      const b=salesData && Object.keys(salesData).length ? new Date(Object.keys(salesData).sort().slice(-1)[0]+'T00:00:00') : new Date();
+      salesTrendDailyAnchor=new Date(b.getFullYear(),b.getMonth(),1);
+    }
+    const y=salesTrendDailyAnchor.getFullYear(), m=salesTrendDailyAnchor.getMonth();
+    $('salesTrendDailyLabel').textContent=`${y}年${m+1}月`;
+    const last=new Date(y,m+1,0).getDate();
+    const vals=[];
+    for(let d=1;d<=last;d++){
+      const iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const rec=salesData[iso];
+      vals.push(rec&&rec.amount!=null?Number(rec.amount):(rec&&rec.closedDinner?0:null));
+    }
+    const present=vals.filter(v=>v!=null);
+    if(!present.length){box.innerHTML='<div class="small" style="color:#666">この月の売上入力データがまだありません。</div>';return;}
+    const max=Math.max(1,...present);
+    const W=700,H=270,padB=30,padT=36,padL=36,padR=36;
+    const plotW=W-padL-padR, plotH=H-padB-padT;
+    const xOf=i=>padL+plotW*(i/(last-1));
+    const yOf=v=>H-padB-(v/max)*plotH;
+    let grid='';
+    [0,0.5,1].forEach(f=>{
+      const gy=H-padB-plotH*f;
+      grid+=`<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#e5e9eb" stroke-width="1"></line>`;
+      grid+=`<text x="2" y="${gy-3}" font-size="9" fill="#999">${manEn(max*f)}</text>`;
+    });
+    let segs='',cur=[];
+    vals.forEach((v,i)=>{
+      if(v!=null)cur.push(`${xOf(i)},${yOf(v)}`);
+      else{if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="#17abe1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;cur=[];}
+    });
+    if(cur.length>1)segs+=`<polyline points="${cur.join(' ')}" fill="none" stroke="#17abe1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    let dots='';
+    vals.forEach((v,i)=>{
+      const showLabel=(i===0||i===last-1||(i+1)%5===0)&&v!=null;
+      if(v==null)return;
+      dots+=`<circle cx="${xOf(i)}" cy="${yOf(v)}" r="${v===0?2.5:3.5}" fill="${v===0?'#ccc':'#17abe1'}" stroke="#fff" stroke-width="1"><title>${i+1}日：${v===0?'定休日':'¥'+v.toLocaleString('ja-JP')}</title></circle>`;
+      if(showLabel)dots+=`<text x="${xOf(i)}" y="${yOf(v)-8}" text-anchor="middle" font-size="10" font-weight="700" fill="#0d7ea3">${v===0?'休':manEn(v)}</text>`;
+      dots+=`<text x="${xOf(i)}" y="${H-padB+14}" text-anchor="middle" font-size="9" fill="#777">${(i===0||i===last-1||(i+1)%5===0)?(i+1):''}</text>`;
+    });
+    const total=present.reduce((a,b)=>a+b,0), workDays=present.filter(v=>v>0).length;
+    box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${grid}${segs}${dots}</svg>`+
+      `<div class="small" style="margin-top:8px;color:#555">月合計：¥${total.toLocaleString('ja-JP')}　営業日数：${workDays}日${workDays?'　平均：¥'+Math.round(total/workDays).toLocaleString('ja-JP'):''}</div>`;
+  }
+  function initSalesTrendControls(){
+    $('salesTrendModeMonthly')?.addEventListener('click',()=>{salesTrendMode='monthly';$('salesTrendModeMonthly').classList.add('active');$('salesTrendModeDaily').classList.remove('active');renderMonthlySalesChart();});
+    $('salesTrendModeDaily')?.addEventListener('click',()=>{salesTrendMode='daily';$('salesTrendModeDaily').classList.add('active');$('salesTrendModeMonthly').classList.remove('active');renderMonthlySalesChart();});
+    $('salesTrendDailyPrev')?.addEventListener('click',()=>{salesTrendDailyAnchor=new Date(salesTrendDailyAnchor.getFullYear(),salesTrendDailyAnchor.getMonth()-1,1);renderMonthlySalesChart();});
+    $('salesTrendDailyNext')?.addEventListener('click',()=>{salesTrendDailyAnchor=new Date(salesTrendDailyAnchor.getFullYear(),salesTrendDailyAnchor.getMonth()+1,1);renderMonthlySalesChart();});
+  }
+  window.renderMonthlySalesChart=renderMonthlySalesChart;
   async function load(){
     if(!fb()?.get)return;
     const a=await fb().get(fb().ref(fb().db,'sales/daily'));
     salesData=a?.val?.()||{};
     window.__salesDailyData=salesData;
     window.__salesPrevSameWeekday=prevSameWeekday;
+    renderMonthlySalesChart();
     window.renderMemoCalendar?.();
     applyDateToForm($('salesDate')?.value||today());
   }
@@ -7494,6 +7649,7 @@ function renderDay(){
     $('salesClosedDinnerToggle')?.addEventListener('click',()=>{closedDinnerState=!closedDinnerState;updateClosedToggleUI();});
     $('salesClearLunch')?.addEventListener('click',()=>clearField('lunch'));
     $('salesClearDinner')?.addEventListener('click',()=>clearField('dinner'));
+    initSalesTrendControls();
     function bootLoad(){if(fb()?.get){load().then(augmentShift);}else{setTimeout(bootLoad,200);}}
     bootLoad();
     setInterval(augmentShift,1500);
