@@ -7712,6 +7712,17 @@ function renderDay(){
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+<style id="ordersFishTableStyle">
+.ordersFishTableWrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* sticky列(品目)を効かせるため border-collapse は使わず separate+spacing:0 にする（collapseだとSafari系でsticky位置がずれる） */
+.ordersFishTable{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;white-space:nowrap}
+.ordersFishTable th,.ordersFishTable td{border-bottom:1px solid #e0e6e8;border-right:1px solid #e0e6e8;padding:7px 10px;text-align:center}
+.ordersFishTable thead th{background:#eefaff;color:#0f7ea8;font-weight:700;position:sticky;top:0;z-index:2;border-top:1px solid #e0e6e8}
+.ordersFishTable tbody th{text-align:left;font-weight:700;background:#f8fcfc;white-space:normal;position:sticky;left:0;z-index:1;border-left:1px solid #e0e6e8}
+.ordersFishTable thead th:first-child{left:0;z-index:3;border-left:1px solid #e0e6e8}
+.ordersFishTable td{color:#222}
+.ordersFishTable .ordersFishTotal{font-weight:700;background:#fff7e0}
+</style>
 <script id="ordersManagementScript">
 (function(){
   const $=id=>document.getElementById(id);
@@ -7836,18 +7847,22 @@ function renderDay(){
     let html='';
     const fishRows=Object.entries(data.fish).filter(([label,byStore])=>Object.keys(byStore).length);
     if(fishRows.length){
+      // 店舗ごとに振り分けやすいよう、品目×店舗のマス表（スプレッドシートの数字部分と同じ形）で表示する。
+      // 列は「その日の発注データに実際に登場する店舗」だけに絞り、無駄な空列を出さない。
+      const usedStores=STORES.filter(s=>fishRows.some(([,byStore])=>byStore[s]!=null));
       html+='<div class="card" style="padding:1rem;margin-bottom:12px"><h2 style="margin:0 0 10px">🐟 鮮魚（本場仕入れ）</h2>';
+      html+='<div class="ordersFishTableWrap"><table class="ordersFishTable"><thead><tr><th>品目</th>'
+        +usedStores.map(s=>`<th>${esc(s)}</th>`).join('')
+        +'<th>合計</th></tr></thead><tbody>';
       fishRows.forEach(([label,byStore])=>{
         const entries=Object.entries(byStore);
         const allNumeric=entries.every(([,v])=>isNumeric(v));
         const total=allNumeric?entries.reduce((a,[,v])=>a+Number(v),0):null;
-        const breakdown=entries.map(([s,v])=>`${esc(s)}${esc(v)}`).join('／');
-        html+=`<div style="padding:8px 0;border-bottom:1px solid #eee">
-          <div style="font-weight:700">${esc(label)}${total!=null?`：${total}`:''}</div>
-          <div style="font-size:13px;color:#666;padding-left:12px">└ ${breakdown}</div>
-        </div>`;
+        html+=`<tr><th>${esc(label)}</th>`
+          +usedStores.map(s=>`<td>${byStore[s]!=null?esc(byStore[s]):'－'}</td>`).join('')
+          +`<td class="ordersFishTotal">${total!=null?total:'－'}</td></tr>`;
       });
-      html+='</div>';
+      html+='</tbody></table></div></div>';
     }
     const remarkStores=Object.keys(data.remarks);
     if(remarkStores.length){
