@@ -7713,15 +7713,19 @@ function renderDay(){
 })();
 </script>
 <style id="ordersFishTableStyle">
-.ordersFishTableWrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-/* sticky列(品目)を効かせるため border-collapse は使わず separate+spacing:0 にする（collapseだとSafari系でsticky位置がずれる） */
-.ordersFishTable{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;white-space:nowrap}
-.ordersFishTable th,.ordersFishTable td{border-bottom:1px solid #e0e6e8;border-right:1px solid #e0e6e8;padding:7px 10px;text-align:center}
-.ordersFishTable thead th{background:#eefaff;color:#0f7ea8;font-weight:700;position:sticky;top:0;z-index:2;border-top:1px solid #e0e6e8}
-.ordersFishTable tbody th{text-align:left;font-weight:700;background:#f8fcfc;white-space:normal;position:sticky;left:0;z-index:1;border-left:1px solid #e0e6e8}
-.ordersFishTable thead th:first-child{left:0;z-index:3;border-left:1px solid #e0e6e8}
+/* 横スクロールではなく、店舗数に応じて自動縮小してカード幅にきっちり収める（スマホの通常スクショで全店舗が1枚に写るようにする） */
+.ordersFishTableWrap{overflow-x:hidden}
+.ordersFishTable{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:14px}
+.ordersFishTable th,.ordersFishTable td{border-bottom:1px solid #e0e6e8;border-right:1px solid #e0e6e8;padding:6px 3px;text-align:center;word-break:break-word;overflow-wrap:break-word}
+.ordersFishTable th:first-child,.ordersFishTable td:first-child{border-left:1px solid #e0e6e8}
+.ordersFishTable thead th{background:#eefaff;color:#0f7ea8;font-weight:700;border-top:1px solid #e0e6e8}
+.ordersFishTable tbody th{text-align:left;font-weight:700;background:#f8fcfc;padding-left:6px}
 .ordersFishTable td{color:#222}
 .ordersFishTable .ordersFishTotal{font-weight:700;background:#fff7e0}
+.ordersFishTable.ordersFishTableSmall{font-size:12px}
+.ordersFishTable.ordersFishTableSmall th,.ordersFishTable.ordersFishTableSmall td{padding:5px 2px}
+.ordersFishTable.ordersFishTableTiny{font-size:10.5px}
+.ordersFishTable.ordersFishTableTiny th,.ordersFishTable.ordersFishTableTiny td{padding:4px 1px}
 </style>
 <script id="ordersManagementScript">
 (function(){
@@ -7850,8 +7854,11 @@ function renderDay(){
       // 店舗ごとに振り分けやすいよう、品目×店舗のマス表（スプレッドシートの数字部分と同じ形）で表示する。
       // 列は「その日の発注データに実際に登場する店舗」だけに絞り、無駄な空列を出さない。
       const usedStores=STORES.filter(s=>fishRows.some(([,byStore])=>byStore[s]!=null));
+      // 店舗数が多い日ほど文字を小さくして、横スクロールなしで1画面（スクショ1枚）に収める。
+      const sizeClass=usedStores.length>=8?'ordersFishTableTiny':(usedStores.length>=6?'ordersFishTableSmall':'');
+      const colgroup='<colgroup><col style="width:20%">'+usedStores.map(()=>'<col>').join('')+'<col style="width:11%"></colgroup>';
       html+='<div class="card" style="padding:1rem;margin-bottom:12px"><h2 style="margin:0 0 10px">🐟 鮮魚（本場仕入れ）</h2>';
-      html+='<div class="ordersFishTableWrap"><table class="ordersFishTable"><thead><tr><th>品目</th>'
+      html+=`<div class="ordersFishTableWrap"><table class="ordersFishTable ${sizeClass}">${colgroup}<thead><tr><th>品目</th>`
         +usedStores.map(s=>`<th>${esc(s)}</th>`).join('')
         +'<th>合計</th></tr></thead><tbody>';
       fishRows.forEach(([label,byStore])=>{
