@@ -1333,6 +1333,10 @@ body{overflow-anchor:none!important;}
   border-radius:0 0 3px 3px;
 }
 .navtabs.navtabs4 button:hover{background-color:#ffffff !important;border-color:#4fb0b4 !important}
+
+/* 仕込み表：数量変更を＋／−ボタン方式に変更（①上々と統一） */
+.prepQtyBtn{width:26px!important;height:26px!important;min-height:0!important;padding:0!important;margin:0!important;font-size:15px!important;line-height:1!important;border-radius:50%!important;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;touch-action:manipulation;background:#dff3fa!important;color:#0e6f92!important;border:1px solid #bfe6f0!important;box-shadow:none!important}
+.prepQtyWrap .prepCount{flex:0 1 auto!important;width:auto!important;min-width:22px;text-align:center;font-weight:800;font-size:16px!important;color:#171717;padding:0!important;background:transparent;border:0!important}
 </style>
 </head>
 <body><div class="wrap">
@@ -2776,8 +2780,9 @@ function renderPrepList(){
    else if(ss.tag==="off")seasonTag=`<span class="prepSeasonTag prepSeasonOff">🌙 季節外（${x.seasonStart}〜${x.seasonEnd}月）</span>`;
    else if(ss.tag==="forceShow")seasonTag=`<span class="prepSeasonTag prepSeasonForce">👁 常に表示中</span>`;
    else if(ss.tag==="forceHide")seasonTag=`<span class="prepSeasonTag prepSeasonOff">🚫 常に非表示中</span>`;
-   return `<div class="prepRow ${st.done?"prepDone":""} ${!ss.visible?"prepOffSeason":""}"><input type="checkbox" data-pc="${id}" ${st.done?"checked":""}><div><b class="prepRecipeOpen" data-recipe-id="${id}" data-recipe-name="${esc(x.name)}">${esc(x.name)}</b><button type="button" class="prepUndoBtn" data-pundo="${id}" data-pundo-name="${esc(x.name)}" title="今日の仕込みから外す" aria-label="${esc(x.name)}を今日の仕込みから外す">↺</button>${seasonTag}<div class="small">平日 ${x.weekday??0} ／ 週末 ${x.weekend??0}</div></div><div class="prepQtyWrap"><select class="prepCount" data-pn="${id}">${Array.from({length:51},(_,i)=>`<option ${Number(n)===i?"selected":""}>${i}</option>`).join("")}</select><span class="prepQtyUnit">${esc(x.unit||"")}</span></div></div>`}).join("")+"</section>"}
- $("prepList").innerHTML=h||'<div class="empty">仕込み品目はまだありません。</div>';document.querySelectorAll("[data-pc]").forEach(c=>c.onchange=()=>update(ref(db,"prep/state/"+prepSelectedDate+"/"+c.dataset.pc),{done:c.checked}));document.querySelectorAll("[data-pn]").forEach(c=>c.onchange=()=>update(ref(db,"prep/state/"+prepSelectedDate+"/"+c.dataset.pn),{count:Number(c.value)}));document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=async()=>{const id=b.dataset.pick,x=prepItems[id];if(!x)return;await update(ref(db,"prep/state/"+prepSelectedDate+"/"+id),{count:prepDefaultCount(x,prepSelectedDate),done:false})});
+   return `<div class="prepRow ${st.done?"prepDone":""} ${!ss.visible?"prepOffSeason":""}"><input type="checkbox" data-pc="${id}" ${st.done?"checked":""}><div><b class="prepRecipeOpen" data-recipe-id="${id}" data-recipe-name="${esc(x.name)}">${esc(x.name)}</b><button type="button" class="prepUndoBtn" data-pundo="${id}" data-pundo-name="${esc(x.name)}" title="今日の仕込みから外す" aria-label="${esc(x.name)}を今日の仕込みから外す">↺</button>${seasonTag}<div class="small">平日 ${x.weekday??0} ／ 週末 ${x.weekend??0}</div></div><div class="prepQtyWrap" data-pn="${id}"><button type="button" class="prepQtyBtn" data-prepqminus="${id}" aria-label="数量を減らす">−</button><span class="prepCount">${n}</span><span class="prepQtyUnit">${esc(x.unit||"")}</span><button type="button" class="prepQtyBtn" data-prepqplus="${id}" aria-label="数量を増やす">＋</button></div></div>`}).join("")+"</section>"}
+ $("prepList").innerHTML=h||'<div class="empty">仕込み品目はまだありません。</div>';document.querySelectorAll("[data-pc]").forEach(c=>c.onchange=()=>update(ref(db,"prep/state/"+prepSelectedDate+"/"+c.dataset.pc),{done:c.checked}));document.querySelectorAll("[data-prepqminus]").forEach(b=>b.onclick=()=>{const id=b.dataset.prepqminus,cur=Number(prepState[id]?.count)||0;update(ref(db,"prep/state/"+prepSelectedDate+"/"+id),{count:Math.max(0,cur-1)})});
+document.querySelectorAll("[data-prepqplus]").forEach(b=>b.onclick=()=>{const id=b.dataset.prepqplus,cur=Number(prepState[id]?.count)||0;update(ref(db,"prep/state/"+prepSelectedDate+"/"+id),{count:cur+1})});document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=async()=>{const id=b.dataset.pick,x=prepItems[id];if(!x)return;await update(ref(db,"prep/state/"+prepSelectedDate+"/"+id),{count:prepDefaultCount(x,prepSelectedDate),done:false})});
  // 「＋品目名」の誤タップをすぐ戻せるように、追加済みの品目を1つずつ選択前の状態に戻すボタン。
  // 数量を触っていない／未完了のうちは確認なしで即戻せるが、数量が入っていたり完了チェック済みの
  // 場合は誤操作で消してしまわないよう一言確認する。
@@ -2815,14 +2820,12 @@ $("clearPrep").onclick=async()=>{
   // 他の日付のデータには影響しない（手動操作でのみ実行される）。
   const targets=prepFilter==="ALL"?vals(prepItems):oi(prepFilter);
   const u={};targets.forEach(([id])=>u[`prep/state/${prepSelectedDate}/${id}`]=null);
-  prepConfirmed=false;await update(ref(db),u);renderPrepFilters();renderPrepList();
+  u[`prep/state/${prepSelectedDate}/_confirmed`]=null;
+  await update(ref(db),u);
 };
 
-if($("confirmPrep"))$("confirmPrep").onclick=()=>{
-  prepConfirmed=!prepConfirmed;
-  $("confirmPrep").textContent=prepConfirmed?"仕込み確定を解除":"仕込み確定";
-  renderPrepFilters();
-  renderPrepList();
+if($("confirmPrep"))$("confirmPrep").onclick=async()=>{
+  await update(ref(db,"prep/state/"+prepSelectedDate),{_confirmed:!prepConfirmed});
 };
 if($("prepSeasonAllToggle"))$("prepSeasonAllToggle").onclick=()=>{
   prepShowAllSeasons=!prepShowAllSeasons;
@@ -2860,9 +2863,10 @@ onValue(prepItemsRef,s=>{
 });
 // 選択中の日付のデータだけを購読する。日付を切り替えたら購読し直す。
 let prepStateUnsub=null;
+function updateConfirmPrepButton(){const b=$("confirmPrep");if(b)b.textContent=prepConfirmed?"仕込み確定を解除":"仕込み確定"}
 function subscribePrepState(){
   if(prepStateUnsub)prepStateUnsub();
-  prepStateUnsub=onValue(ref(db,"prep/state/"+prepSelectedDate),s=>{prepState=s.val()||{};renderPrepFilters();renderPrepList();updatePrepBadge()});
+  prepStateUnsub=onValue(ref(db,"prep/state/"+prepSelectedDate),s=>{prepState=s.val()||{};prepConfirmed=!!prepState._confirmed;updateConfirmPrepButton();renderPrepFilters();renderPrepList();updatePrepBadge()});
 }
 subscribePrepState();
 // タブのバッジ（残り件数）は画面で選んでいる日付に関わらず、常に実際の「今日」の件数を出す。
