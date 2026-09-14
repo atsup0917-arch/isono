@@ -63,6 +63,21 @@ button.gray{background:#e9eced;color:#13b5d5}.danger{background:#fff0f0;color:#c
 .prepDateRow input[type=date]{flex:1;min-width:140px;margin:0;padding:11px;border:1px solid #d5dbe3;border-radius:9px;background:#fff;font-size:16px!important;box-sizing:border-box}
 .prepDateRow button{width:auto;margin:0;padding:11px 14px;white-space:nowrap}
 #prepDateLabel{font-weight:700}
+/* 仕込み：確定内容まとめ表示 */
+.prepSummaryModal{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:12000;padding:18px;display:flex;align-items:center;justify-content:center}
+.prepSummaryModal[hidden]{display:none!important}
+.prepSummaryBox{width:min(1400px,97vw);max-height:calc(100dvh - 20px);overflow:auto;background:#fff;border-radius:22px;padding:16px 20px}
+.prepSummaryHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.prepSummaryHeader h2{margin:0;font-size:19px}
+#prepSummaryContent{column-width:190px;column-gap:22px}
+.prepSummarySection{margin:0 0 14px;break-inside:avoid;-webkit-column-break-inside:avoid}
+.prepSummarySection h3{margin:0 0 4px;font-size:14px;font-weight:800;color:#14aad9;border-bottom:2px solid #eee;padding-bottom:4px}
+.prepSummaryRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed #eee;font-size:13px}
+.prepSummaryRow b{font-weight:700;color:#222}
+.prepSummaryRow span{font-weight:800;color:#14aad9;white-space:nowrap}
+.prepSummaryRow.done{opacity:.5}
+.prepSummaryRow.done b{text-decoration:line-through}
+.prepSummaryEmpty{text-align:center;color:#777;padding:24px 0}
 #printSheet{display:none}
 @media print{
  @page{size:A4 portrait;margin:9mm}
@@ -1892,6 +1907,7 @@ body{overflow-anchor:none!important;}
 <div class="card prepMainActions">
   <div class="prepActionGroup prepOperation">
     <button class="gray" id="confirmPrep">仕込み確定</button>
+    <button class="gray" id="openPrepSummary" type="button">📋 確定内容をまとめて見る</button>
     <button class="gray" id="clearPrep">仕込みリセット</button>
     <button class="gray" id="prepVegetableBtn" type="button">📦 発注</button>
   </div>
@@ -1907,6 +1923,16 @@ body{overflow-anchor:none!important;}
 <div class="small">iPhoneの印刷画面からプリンターで印刷、またはPDFとして保存できます。</div>
 </div>
 <div id="printSheet"></div>
+
+<div id="prepSummaryModal" class="prepSummaryModal" hidden>
+  <div class="prepSummaryBox">
+    <div class="prepSummaryHeader">
+      <h2 id="prepSummaryTitle">仕込み確定内容</h2>
+      <button type="button" id="prepSummaryClose" class="shoppingModalClose" aria-label="閉じる">×</button>
+    </div>
+    <div id="prepSummaryContent"></div>
+  </div>
+</div>
 
 <div class="card settingsCard"><details><summary>⚙️ 仕込み品目・ポジションの登録・並び替え</summary><div class="settingsBody">
 <h2>ポジション管理</h2><input id="newPos" placeholder="例：刺場"><button id="addPos">＋ ポジション追加</button><div id="posManage"></div>
@@ -2827,6 +2853,29 @@ $("clearPrep").onclick=async()=>{
 if($("confirmPrep"))$("confirmPrep").onclick=async()=>{
   await update(ref(db,"prep/state/"+prepSelectedDate),{_confirmed:!prepConfirmed});
 };
+function renderPrepSummary(){
+ const box=$("prepSummaryContent"); if(!box)return;
+ const d=new Date(prepSelectedDate+"T00:00:00");
+ const dateLabel=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${["日","月","火","水","木","金","土"][d.getDay()]}）`;
+ const scopeLabel=prepFilter==="ALL"?"全体":(prepPositions[prepFilter]?.name||"");
+ $("prepSummaryTitle").textContent=`仕込み確定内容　${scopeLabel}`;
+ const selectedPositions=prepFilter==="ALL"?op():op().filter(([pid])=>pid===prepFilter);
+ let html=`<div class="small" style="margin-bottom:14px">${dateLabel}</div>`;
+ let hasItems=false;
+ for(const [pid,p] of selectedPositions){
+   const a=oi(pid).filter(([id])=>Number(prepState[id]?.count??0)>0);
+   if(!a.length)continue;
+   hasItems=true;
+   html+=`<div class="prepSummarySection"><h3>${esc(p.name)}</h3>${a.map(([id,x])=>{
+     const st=prepState[id]||{},count=Number(st.count??0)||0,unit=esc(x.unit||"");
+     return `<div class="prepSummaryRow${st.done?" done":""}"><b>${esc(x.name)}</b><span>${count}${unit}</span></div>`;
+   }).join("")}</div>`;
+ }
+ if(!hasItems)html+=`<div class="prepSummaryEmpty">仕込み数が1以上の品目はありません。</div>`;
+ box.innerHTML=html;
+}
+if($("openPrepSummary"))$("openPrepSummary").onclick=()=>{renderPrepSummary();$("prepSummaryModal").hidden=false;document.body.style.overflow="hidden"};
+if($("prepSummaryClose"))$("prepSummaryClose").onclick=()=>{$("prepSummaryModal").hidden=true;document.body.style.overflow=""};
 if($("prepSeasonAllToggle"))$("prepSeasonAllToggle").onclick=()=>{
   prepShowAllSeasons=!prepShowAllSeasons;
   $("prepSeasonAllToggle").textContent=prepShowAllSeasons?"🔎 季節内の品目のみ表示に戻す":"🔎 季節を問わず全品目表示";
